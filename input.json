@@ -1,0 +1,14 @@
+
+{
+  "portal": "amazon",
+  "address_check": {
+    "country": "India",
+    "pin_code": "302001"
+  },
+  "capture_invoice": true,
+  "invoice": {
+    "orders_url": "https://www.amazon.in/your-orders/orders",
+    "output_directory": "downloads"
+  },
+  "output_directory": "downloads"
+}

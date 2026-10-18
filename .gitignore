@@ -1,0 +1,21 @@
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Secrets
+.env
+
+# Authenticated browser state
+.auth/
+playwright/.auth/
+storage_state.json
+
+# Generated output and diagnostics
+artifacts/
+downloads/
+test-results/
+
+# IDE
+.idea/
