@@ -1,28 +1,30 @@
-﻿# Playwright 2FA and Session Automation
+# Playwright 2FA & Session Automation
 
-A Python automation project built with Playwright to demonstrate two-factor authentication, browser session reuse, multi-page navigation, dependent form handling, document capture, and execution reporting.
+A Python automation project built with Playwright to demonstrate two-factor authentication (2FA), reusable browser sessions, multi-page navigation, dependent form handling, document capture, locator fallback strategies, retry handling, and failure evidence.
+
+**Repository:** https://github.com/DeepeshSukhwani/playwright-2fa-session-automation
 
 ## Features
 
-- GitHub authentication using automatically generated TOTP codes.
-- Browser session persistence and reuse across runs.
-- Authentication validation and fresh login when a saved session is invalid.
-- Multi-page navigation through authenticated pages.
-- Dynamic, dependent form-field inspection using a PIN code.
-- PDF invoice capture from an existing Amazon order.
-- JSON manifest containing inputs, visited pages, timings, captured files, and workflow status.
-- Resilient locator resolution using accessible roles, labels, text, and structural fallbacks.
-- Structured logging and failure evidence for troubleshooting.
-- Local configuration and authentication-state files excluded from Git.
+- **Automated GitHub 2FA:** Generates time-based one-time passwords (TOTP) using `pyotp`.
+- **Session persistence:** Saves and reuses authenticated browser state to avoid repeating login when the session remains valid.
+- **Session validation:** Detects invalid or expired sessions and initiates authentication when required.
+- **Multi-page navigation:** Navigates through multiple pages and verifies the expected page state.
+- **Dependent form handling:** Reads configurable input data, fills a postal code, and verifies the dependent city and state fields.
+- **Document capture:** Captures an existing Amazon order invoice as a PDF.
+- **Locator resolution:** Tries multiple locator strategies and records the strategy that succeeds.
+- **Retry handling:** Uses bounded retries for supported retryable operations.
+- **Failure evidence:** Records diagnostic information for failures, including screenshots and HTML where supported.
+- **JSON manifest:** Records workflow inputs, pages visited, execution timings, captured file paths, and execution status.
+- **Configurable inputs:** Uses `input.json` so supported workflow inputs can be changed without modifying the Python code.
 
-## Tech Stack
+## Technology Stack
 
 - Python
-- Playwright
-- Chromium
-- PyOTP
-- python-dotenv
-- JSON
+- Playwright for Python
+- `pyotp` for TOTP generation
+- `python-dotenv` for environment configuration
+- JSON for workflow configuration and execution results
 
 ## Project Structure
 
@@ -31,218 +33,296 @@ playwright-2fa-session-automation/
 ├── auth.py
 ├── browser_manager.py
 ├── config.py
-├── logging_config.py
-├── totp_helper.py
-├── amazon_workflow.py
+├── failure_evidence.py
 ├── input.json
+├── locator_resolver.py
+├── logging_config.py
+├── retry_utils.py
+├── session_manager.py
+├── totp_helper.py
+├── saved_test_page.html
+├── amazon_workflow.py
+├── test_auth_flow.py
+├── test_session_reuse_flow.py
+├── test_auth_totp_retry.py
+├── test_browser_manager.py
+├── test_failure_evidence.py
+├── test_locator_failure_evidence.py
+├── test_locator_resolver.py
+├── test_retry_utils.py
+├── test_session_manager.py
+├── test_totp_helper.py
+├── test_totp_retry.py
 ├── requirements.txt
-├── .env.example
 ├── .gitignore
-├── README.md
-├── tests/
-├── artifacts/       # Generated execution reports
-├── downloads/       # Captured documents
-└── .auth/           # Local browser authentication state
+└── README.md
 ```
 
-Generated files and optional diagnostic scripts may differ from this structure.
+Runtime folders such as `.auth/`, `artifacts/`, and `downloads/` are generated locally and should not be committed.
 
 ## Prerequisites
 
 - Python 3.11 or later
 - Git
-- Chromium supported by Playwright
-- Authorized GitHub credentials and a configured TOTP secret for the GitHub workflow
-- An Amazon account with access to an existing order invoice for the Amazon workflow
+- A Chromium-compatible browser installed by Playwright
+- A GitHub account with TOTP-based two-factor authentication configured for the GitHub authentication workflow
+- An Amazon.in account with access to an existing order invoice for the Amazon workflow
 
-## Setup
+Use only accounts and data that you are authorized to access.
 
-Clone the repository and enter the project directory:
+## Installation
+
+### 1. Clone the repository
 
 ```powershell
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+git clone https://github.com/DeepeshSukhwani/playwright-2fa-session-automation.git
 cd playwright-2fa-session-automation
 ```
 
-Create and activate a virtual environment:
+### 2. Create and activate a virtual environment
+
+On Windows PowerShell:
 
 ```powershell
-python -m venv .venv
+py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-Install dependencies and Chromium:
+If PowerShell blocks script activation, use Command Prompt instead:
+
+```bat
+.venv\Scripts\activate.bat
+```
+
+### 3. Install dependencies
 
 ```powershell
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+```
+
+### 4. Install the Playwright browser
+
+```powershell
 python -m playwright install chromium
 ```
 
-Create a local `.env` file using `.env.example` as a template:
+If your environment restricts browser installation, use an approved installed browser or follow your organization's application-control policy.
+
+## Environment Configuration
+
+Create a file named `.env` in the project root for the GitHub authentication workflow. Use your own GitHub credentials and TOTP secret.
 
 ```dotenv
 GITHUB_USERNAME=your_github_username
 GITHUB_PASSWORD=your_github_password
-GITHUB_TOTP_SECRET=your_totp_secret
+GITHUB_TOTP_SECRET=your_base32_totp_secret
 ```
 
-Use the exact environment-variable names expected by the code. Never commit real credentials, TOTP secrets, or authentication-state files.
+Replace the placeholder values locally. Do not commit `.env`, actual passwords, TOTP secrets, authentication cookies, or browser storage-state files.
+
+The TOTP secret must be the secret associated with your own GitHub authenticator configuration. Do not use an OTP copied from another account.
 
 ## Workflow 1: GitHub 2FA and Session Reuse
 
-### Verify authentication
+The GitHub workflow demonstrates automated TOTP generation, authentication verification, browser-state persistence, and reuse of a saved session.
+
+### Run the authentication flow
 
 ```powershell
 python .\test_auth_flow.py
 ```
 
-This script exercises GitHub login, generates a TOTP code, and verifies that authentication succeeds.
+This test exercises the GitHub authentication flow and verifies that authentication succeeds.
 
-### Verify session reuse
+### Run the session-reuse flow
 
 ```powershell
 python .\test_session_reuse_flow.py
 ```
 
-On the first run, the script authenticates and saves the browser session. On a subsequent run, it loads the saved session and verifies access to the Profile, Security, and Repositories settings pages.
+The session-reuse test verifies the following behavior:
 
-**Verified behavior:** the first run authenticated and saved the session. The second run reported `Loaded saved browser session` and `Authenticated: True` without repeating login or TOTP.
+1. A fresh browser context authenticates when no valid saved session is available.
+2. The authenticated browser state is saved locally.
+3. A subsequent browser context loads the saved state.
+4. The session is checked before proceeding.
+5. When the session is still valid, the workflow reuses it instead of repeating 2FA.
 
-These commands require the corresponding scripts to be present in the repository.
+Session reuse is conditional. GitHub can expire or revoke a session, and a saved browser state is not a permanent authentication token.
 
-## Workflow 2: Amazon Form Inspection and Invoice Capture
+**Note:** The Amazon workflow is separate from this GitHub TOTP workflow. Amazon sign-in and any requested OTP are handled interactively by the user.
 
-Run the Amazon workflow:
+## Workflow 2: Amazon Form Handling and Invoice Capture
+
+The Amazon workflow demonstrates authenticated multi-page navigation, PIN-dependent address fields, and PDF document capture.
+
+Run:
 
 ```powershell
 python .\amazon_workflow.py
 ```
 
-The workflow:
+### What it does
 
-1. Opens the Amazon Orders page and checks the saved session.
-2. Requests manual sign-in and OTP completion when necessary.
-3. Saves the verified browser session locally.
-4. Navigates to the address form and enters the configured PIN code.
-5. Inspects dependent Town/City and State fields without saving the address.
-6. Opens an existing order invoice and captures the PDF.
-7. Writes a JSON manifest containing execution details.
-8. Closes browser resources and records failure information when execution fails.
+1. Opens Amazon.in and checks the Your Orders page.
+2. Reuses the saved Amazon browser state when available.
+3. Waits for the user to sign in and complete any required OTP if the session is not authenticated.
+4. Saves browser state after the Orders page has been verified.
+5. Opens the address form and enters the configured PIN code.
+6. Checks whether the dependent city and state fields are populated.
+7. Captures an existing order invoice as a PDF when enabled.
+8. Writes a JSON manifest with execution status and diagnostic details.
 
-Amazon sign-in may require manual interaction. This workflow does not claim to automate Amazon OTP retrieval.
+The address workflow **does not save or submit the address**. It inspects the dependent fields only.
 
-### Configure `input.json`
+The Amazon workflow may require interactive sign-in. It does not claim to automate Amazon's OTP delivery or generate Amazon OTPs.
 
-Example configuration:
+### Configure the inputs
+
+Edit `input.json` to change the supported workflow inputs. For example, the address-check section may use this structure:
 
 ```json
 {
   "capture_invoice": true,
   "address_check": {
     "country": "India",
-    "pin_code": "YOUR_TEST_PIN_CODE"
+    "pin_code": "302001"
   },
   "output_directory": "downloads"
 }
 ```
 
-Use a valid test PIN code and an account you are authorized to access. The address inspection does not save or submit an address.
+Keep the fields and structure expected by the existing `input.json` and `amazon_workflow.py` implementation. If your current file contains additional settings, preserve them.
 
-## Session Management
+Use a PIN code appropriate for your test. The resulting city and state depend on the portal's current behavior and the supplied PIN code.
 
-Browser authentication state is stored locally for reuse.
+### Generated output
 
-- Missing or invalid session state triggers authentication.
-- Valid saved state allows authenticated navigation without repeating login.
-- Expired sessions must be detected before protected workflow steps continue.
-- Authentication-state files are excluded from version control.
+The workflow generates local files, including:
+
+```text
+.auth/amazon_state.json
+artifacts/manifest.json
+downloads/order_invoice.pdf
+```
+
+- `.auth/amazon_state.json` stores browser authentication state.
+- `artifacts/manifest.json` records workflow inputs, pages visited, timings, captured-file paths, and status.
+- `downloads/order_invoice.pdf` contains the captured invoice when invoice capture succeeds.
+
+These files are runtime artifacts, not source files for the public repository. An invoice can contain personal information, so do not publish a real invoice or its identifying details.
 
 ## Locator Resolution
 
-The locator resolver prioritizes resilient selectors in this order:
+The locator resolver is designed to try multiple ways to identify page elements rather than depending on a single brittle selector.
 
-1. Accessible role and name.
-2. Associated label.
-3. Nearby or descriptive text.
-4. Structural relationships.
-5. Stable IDs or classes as fallbacks.
+The intended fallback order prioritizes user-facing locators, such as accessible roles and names, before alternatives such as labels, nearby text, structural relationships, and IDs or classes.
 
-The successful strategy is logged to make locator decisions easier to inspect and troubleshoot.
+The resolver logs the strategy used when it finds a matching element. This helps diagnose page changes and understand why a locator succeeded.
 
-## Reliability and Failure Evidence
+The repository includes `saved_test_page.html` for testing locator behavior against saved HTML without depending on a live website.
 
-The workflow uses bounded waits, structured logging, and error handling to improve reliability.
+Run:
 
-When configured, failure evidence can include:
+```powershell
+python .\test_locator_resolver.py
+```
 
-- Failed workflow stage.
-- Current page URL.
-- Screenshot and HTML snapshot.
-- Locator-resolution attempts.
-- Error details and execution timings.
-- JSON manifest.
+The saved HTML test is intended to make locator behavior repeatable and easier to debug.
 
-Review failure evidence for sensitive information before sharing it.
+## Retry Handling and Failure Evidence
 
-## Output Artifacts
+The project includes retry utilities and failure-evidence helpers.
 
-| Artifact | Purpose |
-|---|---|
-| `artifacts/manifest.json` | Inputs, pages visited, timings, status, and captured-file paths |
-| `downloads/order_invoice.pdf` | Captured invoice from an existing order |
-| Failure evidence | Troubleshooting information for unsuccessful runs |
-| Local browser state | Authenticated session reuse |
+The implementation supports bounded retries for operations classified as retryable. It should not retry terminal failures indefinitely or repeat sensitive actions blindly.
 
-These files are generated at runtime. Do not commit invoices, account information, browser state, or sensitive failure evidence.
+Relevant test commands include:
 
-## Validation
+```powershell
+python .\test_retry_utils.py
+python .\test_auth_totp_retry.py
+python .\test_totp_retry.py
+python .\test_failure_evidence.py
+python .\test_locator_failure_evidence.py
+```
 
-Run the GitHub workflow checks:
+When a supported workflow fails, diagnostic evidence may include:
+
+- A screenshot of the failed page
+- Saved HTML for inspection
+- The current page URL
+- The failed stage or operation
+- Locator-resolution attempts
+- Error and timing information
+
+Evidence is stored locally under the artifacts directory where supported. Review evidence before sharing it, since screenshots and HTML can contain account details or other sensitive data.
+
+## Run the Supporting Tests
+
+Run the standalone test scripts individually from the project root:
+
+```powershell
+python .\test_totp_helper.py
+python .\test_totp_retry.py
+python .\test_auth_totp_retry.py
+python .\test_session_manager.py
+python .\test_browser_manager.py
+python .\test_locator_resolver.py
+python .\test_failure_evidence.py
+python .\test_locator_failure_evidence.py
+python .\test_retry_utils.py
+```
+
+The GitHub end-to-end tests use live authentication and require a correctly configured account and `.env` file:
 
 ```powershell
 python .\test_auth_flow.py
 python .\test_session_reuse_flow.py
 ```
 
-Run the Amazon workflow:
+The Amazon workflow requires access to an Amazon account and an existing order invoice. Run it only when you are authorized to access that account.
 
-```powershell
-python .\amazon_workflow.py
-```
+## Security Considerations
 
-Check Python syntax:
+- Never commit `.env`, passwords, TOTP secrets, browser cookies, or storage-state files.
+- Do not commit `.auth/`, real invoices, screenshots containing personal data, or failure evidence containing sensitive information.
+- Keep generated artifacts local and inspect them before sharing.
+- Use test accounts and non-sensitive test data whenever possible.
+- Do not bypass account security controls or attempt to access accounts without authorization.
+- Re-authenticate through the normal sign-in process when a saved session is invalid or expired.
 
-```powershell
-python -m py_compile .\amazon_workflow.py
-```
+The `.gitignore` file excludes common local environment and runtime artifact paths. Review it before committing changes.
 
-The GitHub session-reuse check should confirm that the saved session loads successfully. A successful Amazon run should produce a success manifest and capture the invoice when invoice capture is enabled.
+## Known Limitations
 
-## Security
+- GitHub authentication depends on valid credentials, a correctly configured TOTP secret, and the current login flow.
+- Saved browser sessions can expire, be revoked, or require additional verification.
+- Amazon OTP handling is interactive and depends on the user completing sign-in within the configured wait period.
+- Amazon's page layout and invoice controls can change, which may require locator updates.
+- Dependent address-field behavior can vary with the supplied PIN code and portal responses.
+- Live workflows require network connectivity and valid account access.
+- A successful local test does not guarantee that every future live run will succeed.
 
-- Keep `.env` out of Git.
-- Keep `.auth/` and browser storage-state files out of Git.
-- Do not commit invoices or screenshots containing personal information.
-- Never log passwords, TOTP secrets, or authentication codes.
-- Use only accounts and documents you are authorized to access.
+## Assignment Coverage
 
-## Limitations
+| Requirement | Implementation |
+|---|---|
+| 2FA authentication | GitHub TOTP authentication flow |
+| Code generation and retry behavior | TOTP helper and authentication retry tests |
+| Session persistence and reuse | Browser/session manager and session-reuse test |
+| Stale-session handling | Session validation and authentication fallback |
+| Multi-page navigation | GitHub and Amazon workflows |
+| Dependent form fields | Amazon PIN-dependent city/state inspection |
+| Document capture | Existing Amazon order invoice PDF |
+| Locator fallback | Locator resolver and saved HTML test |
+| Retry behavior | Retry utilities and retry tests |
+| Failure diagnostics | Failure-evidence helpers and tests |
+| JSON-configurable inputs | `input.json` |
+| Execution manifest | `artifacts/manifest.json` |
 
-- Website layouts and authentication behavior may change.
-- Saved sessions may expire or be invalidated.
-- Amazon login may require manual interaction.
-- Invoice capture requires an accessible existing order and invoice.
-- TOTP generation requires a valid secret and synchronized system time.
+## Author
 
-## Future Improvements
+GitHub: [DeepeshSukhwani](https://github.com/DeepeshSukhwani)
 
-- Add a single entry point for the complete GitHub authentication workflow.
-- Expand tests for expired and corrupted sessions.
-- Add offline HTML fixtures for locator regression testing.
-- Improve failure-evidence redaction.
-- Add CI checks for non-interactive tests.
-
-## License
-
-No license is specified for this assignment.
+Project: [playwright-2fa-session-automation](https://github.com/DeepeshSukhwani/playwright-2fa-session-automation)
