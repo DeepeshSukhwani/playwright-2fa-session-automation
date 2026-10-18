@@ -134,6 +134,10 @@ def inspect_address_form(
         timeout=TIMEOUT_MS
     )
 
+    page.locator(
+        "#address-ui-widgets-enterAddressPostalCode"
+    ).wait_for(state="visible", timeout=TIMEOUT_MS)
+
     address_inputs = inputs.get("address_check", {})
     pin_code = str(address_inputs.get("pin_code", "")).strip()
 
@@ -142,7 +146,11 @@ def inspect_address_form(
 
     pin_field, pin_result = resolve_locator(
         page,
-        label=re.compile(r"pincode|postal code", re.I),
+        role="textbox",
+        name=re.compile(r"PIN|postal code|pincode", re.I),
+        label=re.compile(r"PIN|postal code|pincode", re.I),
+        nearby_text="PIN code",
+        element_id="address-ui-widgets-enterAddressPostalCode",
     )
 
     resolver_attempts.extend(pin_result["attempts"])
@@ -346,7 +354,6 @@ def capture_invoice(page, context, inputs: dict, manifest: dict) -> None:
                     type(exc).__name__,
                 )
 
-
 def main() -> None:
     """Run the workflow and write a manifest on success or failure."""
     configure_logging()
@@ -373,104 +380,116 @@ def main() -> None:
     }
 
     started = time.perf_counter()
-    browser = None
-    context = None
-    page = None
     current_stage = "browser_setup"
     resolver_attempts = []
 
-
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=False)
+            browser = None
+            context = None
+            page = None
 
-            current_stage = "session_setup"
-            options = {}
-            if AUTH_FILE.is_file():
-                options["storage_state"] = str(AUTH_FILE)
-
-            context = browser.new_context(**options)
-            page = context.new_page()
-
-            # Collect browser console messages for failure diagnostics.
-            page._failure_console_logs = []
-
-            page.on(
-                "console",
-                lambda message: page._failure_console_logs.append(
-                    f"{message.type}: {message.text}"
-                ),
-            )
-
-            current_stage = "session_validation"
-            ensure_session(context, page)
-            manifest["pages_visited"].append("Your Orders")
-
-            if inputs.get("address_check"):
-                current_stage = "address_check"
-                stage_start = time.perf_counter()
-                inspect_address_form(
-                    page, inputs, manifest, resolver_attempts
-                )
-                manifest["stage_timings_seconds"]["address_check"] = round(
-                    time.perf_counter() - stage_start, 3
-                )
-
-            if inputs.get("capture_invoice", False):
-                current_stage = "invoice_capture"
-                capture_invoice(page, context, inputs, manifest)
-
-            manifest["status"] = "success"
-            print("Amazon workflow completed.")
-
-    except Exception as exc:
-        manifest["status"] = "failed"
-        manifest["failure_stage"] = current_stage
-        logger.error(
-            "Amazon workflow failed during stage: %s",
-            current_stage,
-        )
-
-        if page is not None:
             try:
-                evidence = capture_failure_evidence(
-                    page=page,
-                    stage=current_stage,
-                    error=exc,
-                    resolver_attempts=resolver_attempts,
-                )
-                manifest["failure_evidence"] = evidence
-            except Exception:
-                logger.exception("Failure-evidence capture also failed")
+                browser = playwright.chromium.launch(headless=False)
 
-        # Avoid logging the exception text here because it may contain
-        # URLs or data that has not been sanitized.
+                current_stage = "session_setup"
+                options = {}
+                if AUTH_FILE.is_file():
+                    options["storage_state"] = str(AUTH_FILE)
+
+                context = browser.new_context(**options)
+                page = context.new_page()
+
+                # Collect browser console messages for failure diagnostics.
+                page._failure_console_logs = []
+                page.on(
+                    "console",
+                    lambda message: page._failure_console_logs.append(
+                        f"{message.type}: {message.text}"
+                    ),
+                )
+
+                current_stage = "session_validation"
+                ensure_session(context, page)
+                manifest["pages_visited"].append("Your Orders")
+
+                if inputs.get("address_check"):
+                    current_stage = "address_check"
+                    stage_start = time.perf_counter()
+
+                    inspect_address_form(
+                        page, inputs, manifest, resolver_attempts
+                    )
+
+                    manifest["stage_timings_seconds"]["address_check"] = round(
+                        time.perf_counter() - stage_start, 3
+                    )
+
+                if inputs.get("capture_invoice", False):
+                    current_stage = "invoice_capture"
+                    capture_invoice(page, context, inputs, manifest)
+
+                manifest["status"] = "success"
+                print("Amazon workflow completed.")
+
+            except Exception as exc:
+                manifest["status"] = "failed"
+                manifest["failure_stage"] = current_stage
+
+                logger.error(
+                    "Amazon workflow failed during stage: %s",
+                    current_stage,
+                )
+
+                if page is not None:
+                    try:
+                        evidence = capture_failure_evidence(
+                            page=page,
+                            stage=current_stage,
+                            error=exc,
+                            resolver_attempts=resolver_attempts,
+                        )
+                        manifest["failure_evidence"] = evidence
+                    except Exception:
+                        logger.exception(
+                            "Failure-evidence capture also failed"
+                        )
+
+                # Avoid logging the raw exception because it may contain
+                # URLs or data that has not been sanitized.
+                raise
+
+            finally:
+                # Close resources while Playwright is still active.
+                if context is not None:
+                    try:
+                        context.close()
+                        logger.info("Browser context closed")
+                    except Exception as exc:
+                        logger.warning(
+                            "Browser context cleanup failed: %s",
+                            type(exc).__name__,
+                        )
+
+                if browser is not None:
+                    try:
+                        if browser.is_connected():
+                            browser.close()
+                            logger.info("Browser closed")
+                        else:
+                            logger.info("Browser was already disconnected")
+                    except Exception as exc:
+                        logger.warning(
+                            "Browser cleanup failed: %s",
+                            type(exc).__name__,
+                        )
+
+    except Exception:
+        # The original failure is already recorded above when it occurs
+        # inside the browser workflow. Do not log unsanitized exception text.
         raise
 
     finally:
-        if context is not None:
-            try:
-                context.close()
-                logger.info("Browser context closed")
-            except Exception as exc:
-                logger.warning(
-                    "Browser context cleanup failed: %s",
-                    type(exc).__name__,
-                )
-
-        if browser is not None:
-            try:
-                if browser.is_connected():
-                    browser.close()
-                    logger.info("Browser closed")
-                else:
-                    logger.info("Browser was already disconnected")
-            except Exception as exc:
-                logger.warning(
-                    "Browser cleanup failed: %s",
-                    type(exc).__name__,
-                )
-
         manifest["stage_timings_seconds"]["total"] = round(
             time.perf_counter() - started, 3
         )
